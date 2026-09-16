@@ -1,0 +1,78 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Caderneta de Sherlock</title>
+  <meta name="description" content="Bloco de notas do jogo Scotland Yard – Sherlock Holmes: pistas por local, chaves e perguntas do caso.">
+
+  <link rel="manifest" href="manifest.json">
+  <meta name="theme-color" content="#E7EBE4" media="(prefers-color-scheme: light)">
+  <meta name="theme-color" content="#0F1B17" media="(prefers-color-scheme: dark)">
+  <link rel="icon" type="image/png" sizes="192x192" href="icons/icon-192.png">
+  <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-title" content="Caderneta">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IM+Fell+English+SC&family=Courier+Prime:wght@400;700&family=Libre+Franklin:wght@400;500;600&display=swap">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div class="wrap">
+  <header class="bar">
+    <label for="caso-sel" hidden>Escolher caso</label>
+    <select id="caso-sel"></select>
+    <span id="status" aria-live="polite"></span>
+    <button class="btn btn-solid" id="novo" type="button">Novo caso</button>
+  </header>
+
+  <section class="case" aria-label="Caso">
+    <p class="eyebrow">Caderneta do detetive · Scotland Yard</p>
+    <div class="case-id">
+      <label for="numero">Caso nº</label>
+      <input id="numero" inputmode="numeric" autocomplete="off" placeholder="—">
+    </div>
+    <label for="titulo" hidden>Título do caso</label>
+    <input id="titulo" autocomplete="off" placeholder="Título do caso">
+    <p class="demo" id="demo" hidden>Este é um caso de exemplo. Toque em <b>Novo caso</b> para começar o seu — dá pra apagar o exemplo lá embaixo.</p>
+  </section>
+
+  <section aria-labelledby="h-relato">
+    <div class="sec-h"><h2 id="h-relato">Relato</h2><span class="meta">o que foi lido no início</span></div>
+    <label for="relato" hidden>Relato do caso</label>
+    <textarea id="relato" class="lined" placeholder="Vítima, suspeitos, horário, local do crime…"></textarea>
+  </section>
+
+  <section aria-labelledby="h-perg">
+    <div class="sec-h"><h2 id="h-perg">Perguntas do caso</h2><span class="meta" id="perg-meta"></span></div>
+    <div class="qs" id="qs"></div>
+    <div><button class="btn btn-quiet" id="add-q" type="button">+ Pergunta</button></div>
+  </section>
+
+  <section aria-labelledby="h-locais">
+    <div class="sec-h"><h2 id="h-locais">Locais</h2><span class="meta" id="loc-meta"></span></div>
+    <div class="filter" role="group" aria-label="Filtrar locais">
+      <button type="button" data-f="todos" aria-pressed="true">Todos</button>
+      <button type="button" data-f="pistas" aria-pressed="false">Com pistas</button>
+      <button type="button" data-f="pendentes" aria-pressed="false">Não visitados</button>
+    </div>
+    <div class="locs" id="locs"></div>
+    <form class="add-loc" id="add-loc">
+      <label for="novo-local" hidden>Nome do novo local</label>
+      <input id="novo-local" autocomplete="off" placeholder="Outro local do tabuleiro">
+      <button class="btn" type="submit">Adicionar</button>
+    </form>
+  </section>
+
+  <footer class="foot">
+    <p>As anotações ficam salvas neste aparelho e continuam aqui mesmo fechando o app ou bloqueando a tela.</p>
+    <button class="btn btn-quiet" id="apagar" type="button">Apagar este caso</button>
+  </footer>
+</div>
+<script src="app.js"></script>
+</body>
+</html>
