@@ -31,27 +31,17 @@ function novoCaso() {
   };
 }
 
-function exemplo() {
-  const c = novoCaso();
-  c.exemplo = true;
-  c.numero = "7";
-  c.titulo = "O relógio parado";
-  c.relato = "Lorde Ashby achado morto no quarto 12 do hotel. O relógio do quarto parou às 23h40.\nSuspeitos: a sobrinha, o mordomo e um marinheiro.";
-  c.perguntas[0].a = "Mordomo? conferir álibi";
-  const loc = (n) => c.locais.find((l) => l.nome === n);
-  Object.assign(loc("Farmácia"), { nota: "Alguém comprou arsênico na terça. Assinou \"J. Hale\".", visitado: true });
-  Object.assign(loc("Hotel"), { nota: "Porteiro viu mulher de chapéu verde sair às 23h50.", visitado: true, chave: 1 });
-  Object.assign(loc("Docas"), { chave: 2 });
-  return c;
-}
-
 /* ---------- Estado ---------- */
 
 let data;
 try { data = JSON.parse(localStorage.getItem(STORE)); } catch (e) { data = null; }
-if (!data || !Array.isArray(data.cases) || !data.cases.length) {
-  const ex = exemplo();
-  data = { currentId: ex.id, cases: [ex], filtro: "todos", theme: "auto" };
+if (!data || !Array.isArray(data.cases)) data = { cases: [], filtro: "todos", theme: "auto" };
+// Versões antigas criavam um caso de exemplo na primeira abertura
+data.cases = data.cases.filter((c) => !c.exemplo);
+if (!data.cases.length) {
+  const n = novoCaso();
+  data.cases.push(n);
+  data.currentId = n.id;
 }
 if (!data.cases.some((c) => c.id === data.currentId)) data.currentId = data.cases[0].id;
 if (!THEMES[data.theme]) data.theme = "auto";
@@ -118,7 +108,6 @@ function renderHero() {
   const c = cur();
   $("#numero").value = c.numero;
   $("#titulo").value = c.titulo;
-  $("#demo").hidden = !c.exemplo;
 }
 
 function renderTabs() {

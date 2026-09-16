@@ -172,15 +172,6 @@ button { cursor: pointer; }
   border-radius: 0;
   border-bottom: 1px solid var(--rule);
 }
-.demo {
-  margin: 2px 0 0;
-  padding: 9px 12px;
-  border-radius: 8px;
-  background: var(--accent-soft);
-  color: var(--ink);
-  font-size: 13px;
-  line-height: 1.45;
-}
 
 /* Abas */
 .tabs {
