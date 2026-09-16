@@ -1,4 +1,4 @@
-const CACHE_NAME = "caderneta-v1";
+const CACHE_NAME = "caderneta-v2";
 const ASSETS_TO_CACHE = [
   "./",
   "./index.html",
@@ -28,7 +28,7 @@ self.addEventListener("activate", (event) => {
   self.clients.claim();
 });
 
-// Arquivos do app: usa o cache na hora e atualiza em segundo plano.
+// Arquivos do app: busca a versão nova na rede (até 3 s) e usa o cache se estiver offline.
 // Fontes do Google: guardadas no cache na primeira vez, pra funcionar offline.
 self.addEventListener("fetch", (event) => {
   const req = event.request;
@@ -39,16 +39,21 @@ self.addEventListener("fetch", (event) => {
   if (!sameOrigin && !isFont) return;
 
   event.respondWith(
-    caches.open(CACHE_NAME).then((cache) =>
-      cache.match(req, { ignoreSearch: sameOrigin }).then((cached) => {
-        const network = fetch(req)
-          .then((res) => {
-            if (res && (res.ok || res.type === "opaque")) cache.put(req, res.clone());
-            return res;
-          })
-          .catch(() => cached || (req.mode === "navigate" ? cache.match("./index.html") : undefined));
-        return cached || network;
-      })
-    )
+    caches.open(CACHE_NAME).then(async (cache) => {
+      const cached = await cache.match(req, { ignoreSearch: sameOrigin });
+      const fallback = cached || (req.mode === "navigate" ? await cache.match("./index.html") : undefined);
+
+      const network = fetch(req).then((res) => {
+        if (res && (res.ok || res.type === "opaque")) cache.put(req, res.clone());
+        return res;
+      });
+
+      if (isFont) return cached || network;
+
+      network.catch(() => {});
+      if (!fallback) return network;
+      const timeout = new Promise((resolve) => setTimeout(() => resolve(fallback), 3000));
+      return Promise.race([network.catch(() => fallback), timeout]);
+    })
   );
 });

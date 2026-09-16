@@ -1,15 +1,21 @@
 (function () {
+// Mesma chave da versão anterior: as anotações já feitas continuam valendo
 const STORE = "caderneta-sherlock-v1";
 const LOCAIS = ["Banco", "Bar", "Casa de Penhores", "Charutaria", "Chaveiro", "Docas",
   "Estação de Carruagens", "Farmácia", "Hotel", "Livraria", "Museu", "Parque", "Scotland Yard", "Teatro"];
-const KEY_LABEL = ["Sem chave", "Minha chave", "Trancado"];
-const ICON = {
-  check: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>',
-  key: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="8" cy="15" r="4.2"/><path d="M11 12l9-9M16.5 6.5l3 3M14 9l2 2"/></svg>',
-  lock: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="5" y="11" width="14" height="10" rx="1.5"/><path d="M8 11V7.5a4 4 0 0 1 8 0V11"/></svg>'
+const KEY_LABEL = ["Sem chave", "⚷ Minha chave", "✕ Trancado"];
+const FILTROS = [
+  { k: "todos", l: "Todos" },
+  { k: "pistas", l: "Com pistas" },
+  { k: "pendentes", l: "Não visitados" }
+];
+const THEMES = {
+  auto: { icon: "◐", title: "Tema: automático", next: "dark" },
+  dark: { icon: "☾", title: "Tema: escuro", next: "light" },
+  light: { icon: "☀", title: "Tema: claro", next: "auto" }
 };
 
-const $ = (s) => document.querySelector(s);
+const $ = (s, root) => (root || document).querySelector(s);
 const esc = (s) => String(s).replace(/[&<>"']/g, (m) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[m]);
 const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
 
@@ -30,7 +36,7 @@ function exemplo() {
   c.exemplo = true;
   c.numero = "7";
   c.titulo = "O relógio parado";
-  c.relato = "Lorde Ashby achado morto no quarto 12 do hotel. Relógio do quarto parou às 23h40. Suspeitos: a sobrinha, o mordomo e um marinheiro.";
+  c.relato = "Lorde Ashby achado morto no quarto 12 do hotel. O relógio do quarto parou às 23h40.\nSuspeitos: a sobrinha, o mordomo e um marinheiro.";
   c.perguntas[0].a = "Mordomo? conferir álibi";
   const loc = (n) => c.locais.find((l) => l.nome === n);
   Object.assign(loc("Farmácia"), { nota: "Alguém comprou arsênico na terça. Assinou \"J. Hale\".", visitado: true });
@@ -39,235 +45,389 @@ function exemplo() {
   return c;
 }
 
-let state;
-try { state = JSON.parse(localStorage.getItem(STORE)); } catch (e) { state = null; }
-if (!state || !Array.isArray(state.cases) || !state.cases.length) {
-  const ex = exemplo();
-  state = { currentId: ex.id, cases: [ex], filtro: "todos" };
-}
-if (!state.cases.some((c) => c.id === state.currentId)) state.currentId = state.cases[0].id;
+/* ---------- Estado ---------- */
 
-const cur = () => state.cases.find((c) => c.id === state.currentId);
+let data;
+try { data = JSON.parse(localStorage.getItem(STORE)); } catch (e) { data = null; }
+if (!data || !Array.isArray(data.cases) || !data.cases.length) {
+  const ex = exemplo();
+  data = { currentId: ex.id, cases: [ex], filtro: "todos", theme: "auto" };
+}
+if (!data.cases.some((c) => c.id === data.currentId)) data.currentId = data.cases[0].id;
+if (!THEMES[data.theme]) data.theme = "auto";
+if (!FILTROS.some((f) => f.k === data.filtro)) data.filtro = "todos";
+
+const ui = { tab: "caso", detail: null };
+const cur = () => data.cases.find((c) => c.id === data.currentId);
+
+/* ---------- Salvamento ---------- */
 
 let saveTimer = null;
+const setSaved = (t) => { $("#saved").textContent = t; };
 function flush() {
   clearTimeout(saveTimer);
   saveTimer = null;
   try {
-    localStorage.setItem(STORE, JSON.stringify(state));
-    $("#status").textContent = "Salvo";
+    localStorage.setItem(STORE, JSON.stringify(data));
+    setSaved("salvo");
   } catch (e) {
-    $("#status").textContent = "Sem salvar";
+    setSaved("sem salvar");
   }
 }
 function save() {
   clearTimeout(saveTimer);
-  $("#status").textContent = "…";
-  saveTimer = setTimeout(flush, 300);
+  setSaved("salvando…");
+  saveTimer = setTimeout(flush, 350);
 }
 // Salva na hora ao sair do app, trocar de app ou bloquear a tela
 document.addEventListener("visibilitychange", () => { if (document.visibilityState === "hidden" && saveTimer) flush(); });
 window.addEventListener("pagehide", () => { if (saveTimer) flush(); });
 
-function grow(t) {
-  if (!t.offsetParent) return;
-  t.style.height = "auto";
-  t.style.height = Math.max(t.scrollHeight, 84) + "px";
+/* ---------- Tema ---------- */
+
+const mqDark = window.matchMedia("(prefers-color-scheme: dark)");
+function applyTheme() {
+  const t = data.theme;
+  const root = document.documentElement;
+  if (t === "auto") root.removeAttribute("data-th");
+  else root.setAttribute("data-th", t);
+  const dark = t === "dark" || (t === "auto" && mqDark.matches);
+  $("#theme-color").setAttribute("content", dark ? "#0E1311" : "#EFEEE7");
+  $("#theme-icon").textContent = THEMES[t].icon;
+  $("#theme-btn").title = THEMES[t].title;
 }
+if (mqDark.addEventListener) mqDark.addEventListener("change", applyTheme);
+
+/* ---------- Renderização ---------- */
 
 const rotulo = (c) => "Caso " + (c.numero || "s/nº") + " — " + (c.titulo || "sem título");
 
+function grow(t) {
+  if (!t || !t.offsetParent) return;
+  t.style.height = "auto";
+  t.style.height = t.scrollHeight + 2 + "px";
+}
+
 function renderSelect() {
-  $("#caso-sel").innerHTML = state.cases
-    .map((c) => '<option value="' + c.id + '"' + (c.id === state.currentId ? " selected" : "") + ">" + esc(rotulo(c)) + "</option>")
+  $("#caso-sel").innerHTML = data.cases
+    .map((c) => '<option value="' + c.id + '"' + (c.id === data.currentId ? " selected" : "") + ">" + esc(rotulo(c)) + "</option>")
     .join("");
 }
 
-function renderPerguntas() {
+function renderHero() {
   const c = cur();
-  $("#qs").innerHTML = c.perguntas.map((p, i) =>
-    '<div class="q" data-i="' + i + '">' +
-      '<input class="q-text" id="q-text-' + i + '" aria-label="Pergunta" value="' + esc(p.q) + '" placeholder="Pergunta">' +
-      '<button class="q-del" type="button" aria-label="Remover pergunta">×</button>' +
-      '<input class="q-ans" id="q-ans-' + i + '" aria-label="Resposta" value="' + esc(p.a) + '" placeholder="Sua resposta">' +
-    "</div>").join("");
-  updPergMeta();
+  $("#numero").value = c.numero;
+  $("#titulo").value = c.titulo;
+  $("#demo").hidden = !c.exemplo;
 }
 
-function updPergMeta() {
+function renderTabs() {
   const c = cur();
-  const feitas = c.perguntas.filter((p) => p.a.trim()).length;
-  $("#perg-meta").textContent = feitas + " de " + c.perguntas.length + " respondidas";
-}
-
-function badges(l) {
-  let h = "";
-  if (l.chave === 1) h += '<span class="badge b-mine" title="Minha chave">' + ICON.key + "</span>";
-  if (l.chave === 2) h += '<span class="badge b-locked" title="Trancado">' + ICON.lock + "</span>";
-  if (l.visitado) h += '<span class="badge b-vis" title="Visitado">' + ICON.check + "</span>";
-  return h;
-}
-
-function renderLocais() {
-  const c = cur();
-  $("#locs").innerHTML = c.locais.map((l, i) =>
-    '<details class="loc" data-i="' + i + '" data-visited="' + l.visitado + '">' +
-      "<summary>" +
-        '<span class="loc-name">' + esc(l.nome) + "</span>" +
-        '<span class="badges">' + badges(l) + "</span>" +
-        '<span class="loc-prev">' + esc(l.nota.split("\n")[0]) + "</span>" +
-      "</summary>" +
-      '<div class="loc-body">' +
-        '<textarea class="lined loc-note" id="loc-note-' + i + '" aria-label="Pistas em ' + esc(l.nome) + '" placeholder="Pistas encontradas aqui…">' + esc(l.nota) + "</textarea>" +
-        '<div class="loc-actions">' +
-          '<label class="check"><input type="checkbox" class="loc-vis" id="loc-vis-' + i + '"' + (l.visitado ? " checked" : "") + "> Visitado</label>" +
-          '<button type="button" class="key" data-state="' + l.chave + '">' + (l.chave === 2 ? ICON.lock : ICON.key) + "<span>" + KEY_LABEL[l.chave] + "</span></button>" +
-          (l.custom ? '<button type="button" class="loc-del">Remover local</button>' : "") +
-        "</div>" +
-      "</div>" +
-    "</details>").join("");
-  updLocMeta();
-  applyFilter();
-}
-
-function updLoc(i) {
-  const l = cur().locais[i];
-  const d = $('.loc[data-i="' + i + '"]');
-  d.dataset.visited = l.visitado;
-  d.querySelector(".badges").innerHTML = badges(l);
-  d.querySelector(".loc-prev").textContent = l.nota.split("\n")[0];
-  const k = d.querySelector(".key");
-  k.dataset.state = l.chave;
-  k.innerHTML = (l.chave === 2 ? ICON.lock : ICON.key) + "<span>" + KEY_LABEL[l.chave] + "</span>";
-}
-
-function updLocMeta() {
-  const c = cur();
-  const vis = c.locais.filter((l) => l.visitado).length;
-  $("#loc-meta").textContent = vis + "/" + c.locais.length + " visitados";
-}
-
-function applyFilter() {
-  const f = state.filtro || "todos";
-  document.querySelectorAll(".filter button").forEach((b) => b.setAttribute("aria-pressed", b.dataset.f === f));
-  cur().locais.forEach((l, i) => {
-    const d = $('.loc[data-i="' + i + '"]');
-    d.hidden = (f === "pistas" && !l.nota.trim()) || (f === "pendentes" && l.visitado);
+  const counts = {
+    caso: c.relato.trim() ? "relato" : "vazio",
+    locais: c.locais.filter((l) => l.visitado).length + "/" + c.locais.length,
+    perguntas: c.perguntas.filter((p) => p.a.trim()).length + "/" + c.perguntas.length
+  };
+  document.querySelectorAll(".tab").forEach((b) => {
+    b.setAttribute("aria-pressed", String(b.dataset.tab === ui.tab));
+    $(".tab-count", b).textContent = counts[b.dataset.tab];
   });
 }
 
-function render() {
-  const c = cur();
-  renderSelect();
-  $("#numero").value = c.numero;
-  $("#titulo").value = c.titulo;
-  $("#relato").value = c.relato;
-  $("#demo").hidden = !c.exemplo;
-  renderPerguntas();
-  renderLocais();
-  grow($("#relato"));
+function tplCaso(c) {
+  return (
+    '<div class="sec-head"><h2 class="h2">Relato</h2><span class="sec-meta">o que foi lido no início</span></div>' +
+    '<textarea class="lined" data-field="relato" aria-label="Relato do caso" placeholder="Vítima, suspeitos, horário, local do crime…">' + esc(c.relato) + "</textarea>" +
+    '<div class="case-foot">' +
+      "<p>As anotações ficam salvas neste aparelho e continuam aqui mesmo fechando o app ou bloqueando a tela.</p>" +
+      '<button type="button" class="btn-danger" data-action="delete-case">Apagar este caso</button>' +
+    "</div>"
+  );
 }
 
-const idx = (t) => +t.closest("[data-i]").dataset.i;
+function tplTiles(c) {
+  const f = data.filtro;
+  const tiles = c.locais
+    .map((l, i) => ({ l, i }))
+    .filter(({ l }) => !((f === "pistas" && !l.nota.trim()) || (f === "pendentes" && l.visitado)))
+    .map(({ l, i }) => {
+      const nota = l.nota.trim();
+      return (
+        '<button type="button" class="tile' + (nota ? " has-note" : "") + '" data-action="open-local" data-i="' + i + '">' +
+          '<span class="tile-top">' +
+            (l.visitado ? '<span class="dot dot-ok" title="Visitado">✓</span>' : "") +
+            (l.chave === 1 ? '<span class="dot dot-key" title="Minha chave">⚷</span>' : "") +
+            (l.chave === 2 ? '<span class="dot dot-lock" title="Trancado">✕</span>' : "") +
+            (nota ? '<span class="tag-pista">pista</span>' : "") +
+          "</span>" +
+          '<span class="tile-name">' + esc(l.nome) + "</span>" +
+          '<span class="tile-prev">' + esc(nota ? l.nota.split("\n")[0] : "") + "</span>" +
+        "</button>"
+      );
+    });
+  if (!tiles.length) {
+    return '<p class="tiles-empty">' + (f === "pistas" ? "Nenhum local com pista ainda." : "Todos os locais já foram visitados.") + "</p>";
+  }
+  return tiles.join("");
+}
+
+function tplLocais(c) {
+  return (
+    '<div class="chips" role="group" aria-label="Filtrar locais">' +
+      FILTROS.map((x) => '<button type="button" class="chip" data-action="filter" data-f="' + x.k + '" aria-pressed="' + (data.filtro === x.k) + '">' + x.l + "</button>").join("") +
+    "</div>" +
+    '<div class="tiles" id="tiles">' + tplTiles(c) + "</div>" +
+    '<form class="add-loc" id="add-loc">' +
+      '<input id="novo-local" aria-label="Nome do novo local" autocomplete="off" placeholder="Outro local do tabuleiro">' +
+      '<button type="submit" class="btn-outline">Adicionar</button>' +
+    "</form>"
+  );
+}
+
+function tplDetailActions(l) {
+  return (
+    '<button type="button" class="pill pill-visit" data-action="toggle-visit" aria-pressed="' + !!l.visitado + '">' + (l.visitado ? "✓ Visitado" : "Marcar visitado") + "</button>" +
+    '<button type="button" class="pill pill-key" data-action="cycle-key" data-state="' + l.chave + '">' + KEY_LABEL[l.chave] + "</button>" +
+    (l.custom ? '<button type="button" class="link-btn" data-action="delete-local">Remover local</button>' : "")
+  );
+}
+
+function tplDetail(c) {
+  const l = c.locais[ui.detail];
+  return (
+    '<div class="detail-head">' +
+      '<button type="button" class="icon-btn" data-action="close-detail" aria-label="Voltar aos locais">←</button>' +
+      '<h2 class="h2 h2-lg">' + esc(l.nome) + "</h2>" +
+    "</div>" +
+    '<textarea class="lined lined-detail" data-field="nota" aria-label="Pistas encontradas em ' + esc(l.nome) + '" placeholder="Pistas encontradas aqui…">' + esc(l.nota) + "</textarea>" +
+    '<div class="detail-actions" id="detail-actions">' + tplDetailActions(l) + "</div>"
+  );
+}
+
+function tplPerguntas(c) {
+  return (
+    c.perguntas.map((p, i) =>
+      '<div class="qcard" data-i="' + i + '">' +
+        '<input class="q-text" data-field="q" aria-label="Pergunta" placeholder="Pergunta" value="' + esc(p.q) + '">' +
+        '<button type="button" class="q-del" data-action="delete-q" aria-label="Remover pergunta">×</button>' +
+        '<input class="q-ans" data-field="a" aria-label="Resposta" placeholder="Sua resposta" value="' + esc(p.a) + '">' +
+      "</div>").join("") +
+    '<div><button type="button" class="btn-dashed" data-action="add-q">+ Pergunta</button></div>'
+  );
+}
+
+function renderPanel(animate) {
+  const c = cur();
+  const panel = $("#panel");
+  let html;
+  if (ui.tab === "caso") html = tplCaso(c);
+  else if (ui.tab === "perguntas") html = tplPerguntas(c);
+  else if (ui.detail == null) html = tplLocais(c);
+  else html = tplDetail(c);
+  panel.innerHTML = '<section class="panel' + (animate ? " enter" : "") + '">' + html + "</section>";
+  panel.querySelectorAll("textarea.lined").forEach(grow);
+}
+
+function renderAll() {
+  renderSelect();
+  renderHero();
+  renderTabs();
+  renderPanel(true);
+}
+
+// Rola só o suficiente pro topo do painel ficar logo abaixo das abas
+function scrollToPanel() {
+  const offset = $(".top").offsetHeight + $(".tabs").offsetHeight;
+  const y = $("#panel").getBoundingClientRect().top + window.scrollY - offset;
+  if (window.scrollY > y) window.scrollTo(0, y);
+}
+
+/* ---------- Navegação do detalhe (botão voltar do celular fecha o local) ---------- */
+
+function openDetail(i) {
+  ui.detail = i;
+  history.pushState({ detail: true }, "");
+  renderPanel(true);
+  scrollToPanel();
+}
+function closeDetail() {
+  if (history.state && history.state.detail) history.back();
+  else { ui.detail = null; renderPanel(true); }
+}
+function leaveDetail() {
+  if (history.state && history.state.detail) history.replaceState(null, "");
+  ui.detail = null;
+}
+window.addEventListener("popstate", () => {
+  if (ui.detail != null) {
+    ui.detail = null;
+    renderPanel(true);
+  }
+});
+
+/* ---------- Eventos ---------- */
 
 document.addEventListener("input", (e) => {
-  const t = e.target, c = cur();
+  const t = e.target;
+  const c = cur();
+  const field = t.dataset.field;
   if (t.id === "numero" || t.id === "titulo") {
     c[t.id] = t.value;
     const opt = $("#caso-sel").selectedOptions[0];
     if (opt) opt.textContent = rotulo(c);
-  } else if (t.id === "relato") { c.relato = t.value; grow(t); }
-  else if (t.classList.contains("q-text")) c.perguntas[idx(t)].q = t.value;
-  else if (t.classList.contains("q-ans")) { c.perguntas[idx(t)].a = t.value; updPergMeta(); }
-  else if (t.classList.contains("loc-note")) { const i = idx(t); c.locais[i].nota = t.value; grow(t); updLoc(i); }
-  else return;
+  } else if (field === "relato") {
+    c.relato = t.value;
+    grow(t);
+    renderTabs();
+  } else if (field === "nota" && ui.detail != null) {
+    c.locais[ui.detail].nota = t.value;
+    grow(t);
+  } else if (field === "q" || field === "a") {
+    c.perguntas[+t.closest("[data-i]").dataset.i][field] = t.value;
+    if (field === "a") renderTabs();
+  } else {
+    return;
+  }
   save();
 });
 
 document.addEventListener("change", (e) => {
-  const t = e.target;
-  if (t.id === "caso-sel") {
-    state.currentId = t.value;
-    render();
-    window.scrollTo(0, 0);
-    save();
-  } else if (t.classList.contains("loc-vis")) {
-    const i = idx(t);
-    cur().locais[i].visitado = t.checked;
-    updLoc(i); updLocMeta(); save();
-  }
+  if (e.target.id !== "caso-sel") return;
+  data.currentId = e.target.value;
+  leaveDetail();
+  ui.tab = "caso";
+  renderAll();
+  window.scrollTo(0, 0);
+  save();
 });
-
-document.addEventListener("toggle", (e) => {
-  if (e.target.classList && e.target.classList.contains("loc") && e.target.open) {
-    grow(e.target.querySelector(".loc-note"));
-  }
-}, true);
 
 document.addEventListener("click", (e) => {
-  const t = e.target.closest("button");
-  if (!t) return;
+  const b = e.target.closest("[data-action]");
+  if (!b) return;
   const c = cur();
-  if (t.id === "novo") {
-    const n = novoCaso();
-    state.cases.unshift(n);
-    state.currentId = n.id;
-    render();
-    window.scrollTo(0, 0);
-    $("#numero").focus();
-    save();
-  } else if (t.id === "apagar") {
-    if (!confirm("Apagar \"" + rotulo(c) + "\" e todas as anotações dele?")) return;
-    state.cases = state.cases.filter((x) => x.id !== c.id);
-    if (!state.cases.length) state.cases.push(novoCaso());
-    state.currentId = state.cases[0].id;
-    render();
-    window.scrollTo(0, 0);
-    save();
-  } else if (t.id === "add-q") {
-    c.perguntas.push({ q: "", a: "" });
-    renderPerguntas();
-    $("#q-text-" + (c.perguntas.length - 1)).focus();
-    save();
-  } else if (t.classList.contains("q-del")) {
-    c.perguntas.splice(idx(t), 1);
-    renderPerguntas();
-    save();
-  } else if (t.classList.contains("key")) {
-    const i = idx(t);
-    c.locais[i].chave = (c.locais[i].chave + 1) % 3;
-    updLoc(i);
-    save();
-  } else if (t.classList.contains("loc-del")) {
-    const i = idx(t);
-    if (!confirm("Remover o local \"" + c.locais[i].nome + "\"?")) return;
-    c.locais.splice(i, 1);
-    renderLocais();
-    save();
-  } else if (t.dataset.f) {
-    state.filtro = t.dataset.f;
-    applyFilter();
-    save();
+
+  switch (b.dataset.action) {
+    case "tab":
+      if (ui.tab === b.dataset.tab && ui.detail == null) return;
+      leaveDetail();
+      ui.tab = b.dataset.tab;
+      renderTabs();
+      renderPanel(true);
+      scrollToPanel();
+      break;
+
+    case "theme":
+      data.theme = THEMES[data.theme].next;
+      applyTheme();
+      save();
+      break;
+
+    case "new-case": {
+      const n = novoCaso();
+      data.cases.unshift(n);
+      data.currentId = n.id;
+      leaveDetail();
+      ui.tab = "caso";
+      renderAll();
+      window.scrollTo(0, 0);
+      $("#numero").focus();
+      save();
+      break;
+    }
+
+    case "delete-case":
+      if (!confirm("Apagar \"" + rotulo(c) + "\" e todas as anotações dele?")) return;
+      data.cases = data.cases.filter((x) => x.id !== c.id);
+      if (!data.cases.length) data.cases.push(novoCaso());
+      data.currentId = data.cases[0].id;
+      leaveDetail();
+      ui.tab = "caso";
+      renderAll();
+      window.scrollTo(0, 0);
+      save();
+      break;
+
+    case "filter":
+      data.filtro = b.dataset.f;
+      document.querySelectorAll(".chip").forEach((x) => x.setAttribute("aria-pressed", String(x.dataset.f === data.filtro)));
+      $("#tiles").innerHTML = tplTiles(c);
+      save();
+      break;
+
+    case "open-local":
+      openDetail(+b.dataset.i);
+      break;
+
+    case "close-detail":
+      closeDetail();
+      break;
+
+    case "toggle-visit": {
+      const l = c.locais[ui.detail];
+      l.visitado = !l.visitado;
+      $("#detail-actions").innerHTML = tplDetailActions(l);
+      renderTabs();
+      save();
+      break;
+    }
+
+    case "cycle-key": {
+      const l = c.locais[ui.detail];
+      l.chave = (l.chave + 1) % 3;
+      $("#detail-actions").innerHTML = tplDetailActions(l);
+      save();
+      break;
+    }
+
+    case "delete-local": {
+      const l = c.locais[ui.detail];
+      if (!confirm("Remover o local \"" + l.nome + "\"?")) return;
+      c.locais.splice(ui.detail, 1);
+      closeDetail();
+      if (ui.detail != null) { ui.detail = null; renderPanel(true); } // history.back() fecha de forma assíncrona
+      renderTabs();
+      save();
+      break;
+    }
+
+    case "add-q":
+      c.perguntas.push({ q: "", a: "" });
+      renderPanel(false);
+      renderTabs();
+      $('.qcard[data-i="' + (c.perguntas.length - 1) + '"] .q-text').focus();
+      save();
+      break;
+
+    case "delete-q":
+      c.perguntas.splice(+b.closest("[data-i]").dataset.i, 1);
+      renderPanel(false);
+      renderTabs();
+      save();
+      break;
   }
 });
 
-$("#add-loc").addEventListener("submit", (e) => {
+document.addEventListener("submit", (e) => {
+  if (e.target.id !== "add-loc") return;
   e.preventDefault();
   const inp = $("#novo-local");
   const nome = inp.value.trim();
   if (!nome) { inp.focus(); return; }
   const c = cur();
   c.locais.push({ nome, nota: "", visitado: false, chave: 0, custom: true });
-  inp.value = "";
-  state.filtro = "todos";
-  renderLocais();
-  const d = $('.loc[data-i="' + (c.locais.length - 1) + '"]');
-  d.open = true;
-  d.querySelector(".loc-note").focus();
+  data.filtro = "todos";
+  renderPanel(false);
+  renderTabs();
+  $("#novo-local").focus();
   save();
 });
 
-render();
+window.addEventListener("resize", () => document.querySelectorAll("textarea.lined").forEach(grow));
+
+/* ---------- Início ---------- */
+
+applyTheme();
+renderAll();
 
 // Pede ao navegador pra não apagar os dados quando faltar espaço
 if (navigator.storage && navigator.storage.persist) navigator.storage.persist().catch(() => {});
